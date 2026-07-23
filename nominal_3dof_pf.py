@@ -39,7 +39,7 @@ def atmosphere(h):
 # =====================================
 
 def eom(t, X):
-    
+
 
     x, y, V, gamma, theta, q = X
 
@@ -47,24 +47,9 @@ def eom(t, X):
 
     M = V/a
 
-    alpha = gamma - theta
+    alpha = theta - gamma
 
-
-    
     alpha_deg = np.degrees(alpha)
-
-    alpha_deg = np.clip(
-        alpha_deg,
-        0.0,
-        10.0
-    )
-
-    M = np.clip(
-        M,
-        0.6,
-        2.0
-    )
-    
 
     CD, CL, CM = aero_coeff(
         M,
@@ -90,14 +75,12 @@ def eom(t, X):
         - g*np.sin(gamma)
     )
 
-# CL は下向き正なので、gamma を増やす（上向き）力としては負
     dgamma = (
-    (-L)/(mass*V)
-    - g*np.cos(gamma)/V
+        L/(mass*V)
+        - g*np.cos(gamma)/V
     )
 
-# CM は nose-down 正、q/theta は nose-up 正なので現状のままで正しい
-    dq = -Maero / Iy
+    dq = Maero / Iy
 
     dtheta = q
 
@@ -125,7 +108,7 @@ gamma0 = np.radians(-70)
 
 alpha0 = np.radians(5)
 
-theta0 = gamma0 - alpha0
+theta0 = gamma0 + alpha0
 
 q0 = 0.0
 
@@ -149,6 +132,36 @@ def stop_event(t, X):
 stop_event.terminal = True
 stop_event.direction = -1
 
+
+def alpha_limit_event(t, X):
+
+    gamma = X[3]
+    theta = X[4]
+    alpha_deg = np.degrees(theta - gamma)
+
+    return 10.0 - abs(alpha_deg)
+
+alpha_limit_event.terminal = True
+alpha_limit_event.direction = -1
+
+# =====================================
+# initial aerodynamic check
+# =====================================
+
+CD_init, CL_init, CM_init = aero_coeff(
+    V0/atmosphere(y0)[1],
+    np.degrees(alpha0)
+)
+qinf_init = 0.5*atmosphere(y0)[0]*V0**2
+Maero_init = qinf_init*Sref*Lref*CM_init
+
+print()
+print("===== INITIAL AERO CHECK =====")
+print("Alpha [deg] =", np.degrees(alpha0))
+print("CL [-] =", CL_init)
+print("CM [-] =", CM_init)
+print("Initial aero moment [N m] =", Maero_init)
+
 # =====================================
 # integrate
 # =====================================
@@ -157,7 +170,7 @@ sol = solve_ivp(
     eom,
     [0,100],
     X0,
-    events=stop_event,
+    events=[stop_event, alpha_limit_event],
     max_step=0.05
 )
 
@@ -174,7 +187,10 @@ gamma = np.degrees(sol.y[3])
 
 theta = np.degrees(sol.y[4])
 
-alpha = gamma - theta
+alpha = theta - gamma
+
+rho_hist, a_hist = atmosphere(sol.y[1])
+Mach = V/a_hist
 
 print()
 print("===== FINAL =====")
@@ -184,6 +200,56 @@ print("Altitude [km] =", y[-1])
 print("Velocity [m/s] =", V[-1])
 print("Gamma [deg] =", gamma[-1])
 print("Theta [deg] =", theta[-1])
+
+if sol.t_events[0].size > 0:
+    termination_reason = "高度 6.8 km 到達"
+elif sol.t_events[1].size > 0:
+    termination_reason = "迎角が空力表の有効範囲 |alpha|=10 deg に到達"
+else:
+    termination_reason = "積分終了時刻に到達"
+
+print("Termination reason =", termination_reason)
+print("Alpha [deg] =", alpha[-1])
+
+# -------------------------------------
+# Altitude
+# -------------------------------------
+
+plt.figure(figsize=(8,5))
+
+plt.plot(
+    sol.t,
+    y,
+    linewidth=2
+)
+
+plt.xlabel("Time [s]")
+plt.ylabel("Altitude [km]")
+plt.title("Altitude History")
+
+plt.grid(True)
+
+plt.savefig("altitude_history.png")
+
+# -------------------------------------
+# Mach
+# -------------------------------------
+
+plt.figure(figsize=(8,5))
+
+plt.plot(
+    sol.t,
+    Mach,
+    linewidth=2
+)
+
+plt.xlabel("Time [s]")
+plt.ylabel("Mach [-]")
+plt.title("Mach Number History")
+
+plt.grid(True)
+
+plt.savefig("mach_history.png")
 
 # -------------------------------------
 # Theta
@@ -250,5 +316,7 @@ plt.title("Pitch Rate History")
 plt.grid(True)
 
 plt.savefig("q_history.png")
+
+print("Saved figures = altitude_history.png, mach_history.png, alpha_history.png")
 
 plt.close('all')
