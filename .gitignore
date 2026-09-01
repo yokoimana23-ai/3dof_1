@@ -1,0 +1,4 @@
+# Generated binary plots from evaluate_pf_aero.py are reproducible and omitted from PRs.
+pf_aero_evaluation/*.png
+# Generated binary plots from evaluate_gf_aero.py are reproducible and omitted from PRs.
+gf_aero_evaluation/*.png
