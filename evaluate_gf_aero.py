@@ -141,21 +141,44 @@ def delta_effects(df: pd.DataFrame) -> tuple[pd.DataFrame, pd.DataFrame, pd.Data
     )
 
 
-def plot_metric_by_alpha(data: pd.DataFrame, ycols: list[str], stem: str, title_prefix: str,
-                         series_col: str | None = None) -> None:
+def plot_metric_by_alpha(
+    data: pd.DataFrame,
+    ycols: list[str],
+    stem: str,
+    title_prefix: str,
+    series_col: str | None = None,
+    series_linestyles: dict[object, str] | None = None,
+) -> None:
     if data.empty:
         return
+    machs = sorted(data["Mach"].unique())
+    colors = plt.get_cmap("tab10")
+    mach_colors = {mach: colors(i % colors.N) for i, mach in enumerate(machs)}
+    series_linestyles = series_linestyles or {}
     for y in ycols:
         fig, ax = plt.subplots(figsize=(7, 5))
         if series_col:
             for (mach, series), g in data.groupby(["Mach", series_col]):
                 g = g.sort_values("Alpha")
                 label = f"Mach {fmt_num(mach)}, {series_col} {series}"
-                ax.plot(g["Alpha"], g[y], marker="o", label=label)
+                ax.plot(
+                    g["Alpha"],
+                    g[y],
+                    color=mach_colors[mach],
+                    linestyle=series_linestyles.get(series, "-"),
+                    marker="o",
+                    label=label,
+                )
         else:
             for mach, g in data.groupby("Mach"):
                 g = g.sort_values("Alpha")
-                ax.plot(g["Alpha"], g[y], marker="o", label=f"Mach {fmt_num(mach)}")
+                ax.plot(
+                    g["Alpha"],
+                    g[y],
+                    color=mach_colors[mach],
+                    marker="o",
+                    label=f"Mach {fmt_num(mach)}",
+                )
         ax.set_xlabel(LABELS["Alpha"])
         ax.set_ylabel(y)
         ax.set_title(f"{title_prefix}: {y}")
@@ -249,7 +272,14 @@ def main() -> None:
     diff.to_csv(OUTDIR / "delta_effects_vs_delta0.csv", index=False)
     slopes.to_csv(OUTDIR / "control_effectiveness_intervals.csv", index=False)
     nonlinear.to_csv(OUTDIR / "deflection_nonlinearity.csv", index=False)
-    plot_metric_by_alpha(diff, ["dCD", "dCL", "dCM"], "delta_effect", "Delta effect relative to Delta=0", "Delta")
+    plot_metric_by_alpha(
+        diff,
+        ["dCD", "dCL", "dCM"],
+        "delta_effect",
+        "Delta effect relative to Delta=0",
+        "Delta",
+        {4: ":"},
+    )
     plot_metric_by_alpha(slopes, ["CL_delta_per_deg", "CM_delta_per_deg"], "control_effectiveness", "Interval control effectiveness", "interval")
     plot_metric_by_alpha(nonlinear, ["CD_nonlinearity", "CL_nonlinearity", "CM_nonlinearity"], "deflection_nonlinearity", "Departure from 0-to-4 deg linear response")
     trim = trim_static_stability(df)
